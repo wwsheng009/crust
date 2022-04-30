@@ -1,5 +1,6 @@
 use crate::library::lexeme::definition::{TokenKind, TokenType};
 
+/// 关键字判断 
 pub fn identify_token_type(tok: &[char]) -> (TokenType, TokenKind) {
     let tok_value: String = tok.iter().collect();
     match tok_value.as_str() {

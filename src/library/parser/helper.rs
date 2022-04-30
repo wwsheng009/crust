@@ -7,7 +7,12 @@ use crate::library::lexeme::token::Token;
  * returns the lookahead at the lexeme after the semi-colon
  */
 pub fn skip_stmt(lexeme: &Vec<Token>, mut lookahead: usize) -> usize {
-    while lexeme[lookahead].get_token_type() != Semicolon {
+    // let mut pre_line = lexeme[lookahead].get_token_line_num();
+    while lookahead < lexeme.len() && lexeme[lookahead].get_token_type() != Semicolon {
+        // if lexeme[lookahead].get_token_line_num() != pre_line {
+        //     break;
+        // }
+        // pre_line = lexeme[lookahead].get_token_line_num();
         lookahead += 1;
     }
     lookahead + 1

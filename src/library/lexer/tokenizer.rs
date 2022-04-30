@@ -25,7 +25,8 @@ impl<'a> Tokenizer<'a> {
             id: 0,
             line_no: 0,
             current_char: BLACK_HOLE,
-            length: text.len(),
+            // length: text.len(),
+            length: text.chars().count(),
             token: token_vec,
             token_buffer: token_stream,
             input: text.chars(),
@@ -43,6 +44,15 @@ impl<'a> Tokenizer<'a> {
         self.current_char = self.get_next_char();
         loop {
             match self.current_char {
+                '\r' => {
+                    self.current_char = self.get_next_char();
+                    if self.current_char == '\n' {
+                        self.new_line();
+                        // self.push_to_tok_buffer(TokenType::Others, TokenKind::None);
+
+                        self.current_char = self.get_next_char();
+                    }
+                }
                 '\n' => {
                     self.new_line();
                     self.current_char = self.get_next_char()
@@ -387,8 +397,12 @@ impl<'a> Tokenizer<'a> {
                     match self.current_char {
                         '*' => {
                             // start of multi line comment
+                            let mut line_count = 0;
                             loop {
                                 self.push_advance();
+                                if self.current_char == '\n' {
+                                    line_count += 1;
+                                }
                                 if self.current_char == '*' {
                                     self.push_advance();
                                     if self.current_char == '/' {
@@ -397,6 +411,7 @@ impl<'a> Tokenizer<'a> {
                                             TokenType::MultilineComment,
                                             TokenKind::Comments,
                                         );
+                                        self.line_no += line_count;
                                         break;
                                     }
                                 }
@@ -412,8 +427,21 @@ impl<'a> Tokenizer<'a> {
                                             TokenType::SingleLineComment,
                                             TokenKind::Comments,
                                         );
+                                        let old_char = self.current_char;
+
                                         self.current_char = self.get_next_char();
                                         self.new_line();
+                                        // 在window里，需要忽略一个
+                                        match (old_char, self.current_char) {
+                                            ('\r', '\n') => {
+                                                self.current_char = self.get_next_char();
+                                            }
+                                            //     ('\n', '\r') => {
+                                            //         self.current_char = self.get_next_char();
+                                            //     }
+                                            _ => {}
+                                        }
+
                                         break;
                                     }
 
@@ -462,8 +490,38 @@ impl<'a> Tokenizer<'a> {
                     self.push_to_tok_buffer(TokenType::Comma, TokenKind::SpecialChars);
                 }
                 '#' => {
-                    self.push_advance();
-                    self.push_to_tok_buffer(TokenType::HeaderInclude, TokenKind::Preprocessors);
+                    // self.push_advance();
+                    // self.push_to_tok_buffer(TokenType::HeaderInclude, TokenKind::Preprocessors);
+                    self.token.push('/');
+                    self.token.push('/');
+                    loop {
+                        match self.current_char {
+                            '\n' | '\r' | '\0' => {
+                                self.push_to_tok_buffer(
+                                    TokenType::SingleLineComment,
+                                    TokenKind::Comments,
+                                );
+                                let old_char = self.current_char;
+
+                                self.current_char = self.get_next_char();
+                                self.new_line();
+                                // 在window里，需要忽略一个
+                                match (old_char, self.current_char) {
+                                    ('\r', '\n') => {
+                                        self.current_char = self.get_next_char();
+                                    }
+                                    //     ('\n', '\r') => {
+                                    //         self.current_char = self.get_next_char();
+                                    //     }
+                                    _ => {}
+                                }
+
+                                break;
+                            }
+
+                            _ => self.push_advance(),
+                        }
+                    }
                 }
                 '?' => {
                     self.push_advance();
@@ -476,6 +534,7 @@ impl<'a> Tokenizer<'a> {
                 }
             };
 
+            // 中文会有问题，length是按utf8来计算，而postion是按char来计算
             if self.position > self.length {
                 break;
             }
@@ -488,6 +547,8 @@ impl<'a> Tokenizer<'a> {
 
     /// Returns the next char in a input stream pointed by `pos` position
     /// null (\0) otherwise
+    ///
+    /// 返回单个字符
     fn get_next_char(&mut self) -> char {
         self.position += 1;
         if let Some(ch) = self.input.next() {
@@ -496,12 +557,18 @@ impl<'a> Tokenizer<'a> {
             '\0'
         }
     }
+    // fn skip_char(&mut self) {
+    //     self.position +=1;
+    // }
 
     /// Creates a Token from current token and pushes into Token buffer.
     /// Clear the current token
+    ///
+    ///  
     fn push_to_tok_buffer(&mut self, token_type: TokenType, token_kind: TokenKind) {
         let token: String = self.token.iter().cloned().collect();
         if !token.is_empty() {
+            // println!("new token:{}", token);
             let token = Token::new(token, token_kind, token_type, self.line_no, self.id);
             self.token_buffer.push(token);
             self.id += 1;
@@ -512,9 +579,13 @@ impl<'a> Tokenizer<'a> {
     /// Push and Advance
     /// pushes the current character into self.token
     /// updates the current_char with next character
+    ///
+    /// 当前字符串入栈，并带出下一个字符
     fn push_advance(&mut self) {
+        // println!("current char:{}", self.current_char);
         self.token.push(self.current_char);
         self.current_char = self.get_next_char();
+        // println!("next char:{}", self.current_char);
     }
 }
 
@@ -522,7 +593,56 @@ impl<'a> Tokenizer<'a> {
 mod test {
     use super::Tokenizer;
     use crate::library::lexeme::{definition::TokenKind, definition::TokenType, token::Token};
+    #[test]
+    fn test_crlf() {
+        let text = "//s\n\n//u\n";
+        let tok = Tokenizer::new(&text);
+        let data = tok.tokenize();
+        println!("{:#?}", data);
+    }
 
+    #[test]
+    fn test_crlf_file() {
+        let f1 = std::fs::read_to_string("examples\\test1.cpp").unwrap();
+        println!("{}", f1);
+        let tok = Tokenizer::new(&f1);
+        let data = tok.tokenize();
+        println!("{:#?}", data);
+    }
+    #[test]
+    fn test_lf_file() {
+        let f1 = std::fs::read_to_string("examples\\test2.cpp").unwrap();
+        println!("{}", f1);
+        let tok = Tokenizer::new(&f1);
+        let data = tok.tokenize();
+        println!("{:#?}", data);
+    }
+    #[test]
+    fn test_struct1() {
+        let f1 = std::fs::read_to_string("examples\\struct1.cpp").unwrap();
+        println!("{}", f1);
+        let tok = Tokenizer::new(&f1);
+        let data = tok.tokenize();
+        println!("{:#?}", data);
+    }
+    #[test]
+    fn test_multi_line() {
+        let f1 = std::fs::read_to_string("examples\\multi_line.cpp").unwrap();
+        println!("{}", f1);
+        let tok = Tokenizer::new(&f1);
+        let data = tok.tokenize();
+        println!("{:#?}", data);
+    }
+    #[test]
+    fn test_chars() {
+        let word = "中文hello";
+
+        let count = word.chars().count();
+        assert_eq!(7, count);
+
+        let mut chars = word.chars();
+        println!("{:#?}", chars);
+    }
     #[test]
     fn test_get_next_char() {
         let get_next_char = |x: &str| Tokenizer::new(&x).get_next_char();
@@ -864,7 +984,7 @@ mod test {
                 String::from("// Goodbye"),
                 TokenKind::Comments,
                 TokenType::SingleLineComment,
-                2,
+                4, //应该是4
                 2,
             ),
         ];

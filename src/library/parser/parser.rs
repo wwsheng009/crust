@@ -99,6 +99,10 @@ impl Parser {
         let mut temp_lexeme: Vec<Token> = Vec::new();
         while head < lexeme.len() {
             lookahead = head;
+            // println!("current index:{}", head);
+            // if head == 9 {
+            //     println!("current index:{}", head);
+            // }
             //match over token kind and token type
 
             match lexeme[head].get_type() {
@@ -115,7 +119,8 @@ impl Parser {
                     temp_lexeme.clear();
                 }
                 // matches any datatype
-                (TokenKind::DataTypes, _) => {
+                (TokenKind::DataTypes, _) | (TokenKind::Modifiers, _) => {
+                    // println!("{:#?}", lexeme[head]);
                     //if token is modifiers , move lookahead pointer to next lexeme
                     if lexeme[head].get_token_type() == Signed
                         || lexeme[head].get_token_type() == Unsigned
@@ -210,7 +215,10 @@ impl Parser {
                             temp_lexeme.clear();
                         }
 
-                        _ => {}
+                        _ => {
+                            // 防止无限循环
+                            head += 1;
+                        }
                     };
                 }
 
@@ -359,8 +367,17 @@ impl Parser {
                 }
                 // matches for statement
                 (_, KeywordFor) => {
+                    let mut pre_line = lexeme[lookahead].get_token_line_num();
                     while lexeme[lookahead].get_token_type() != LeftCurlyBrace {
+                        if pre_line != lexeme[lookahead].get_token_line_num() {
+                            break;
+                        }
+                        pre_line = lexeme[lookahead].get_token_line_num();
+
                         lookahead += 1;
+                        // 如果不是标准的for (){},即会报错
+                        // for (int i = 0;i < 16;i++)
+                        //  nPeriodsUsed[i] = 1;
                     }
                     lookahead += 1;
                     lookahead = skip_block(&lexeme, lookahead);
@@ -422,7 +439,7 @@ impl Parser {
                             }
                             temp_lexeme.clear();
                         }
-
+                        // i = 100, j = 100;
                         (TokenKind::AssignmentOperators, Assignment) => {
                             // move lookahead past statement
                             if lexeme[head + 3].get_token_type() == Comma {
@@ -531,7 +548,9 @@ impl Parser {
                 }
 
                 (_, KeywordStruct) => {
+                    // struct a {  }
                     if lexeme[head + 2].get_token_type() == LeftCurlyBrace {
+                        // lexeme[head + 1].get_token_type() == LeftCurlyBrace {
                         //struct A{};
                         while lexeme[head].get_token_type() != RightCurlyBrace {
                             temp_lexeme.push(lexeme[head].clone());
@@ -584,6 +603,10 @@ impl Parser {
                 }
 
                 (_, KeywordClass) => {
+                    // class 偏移第二个是{
+                    // class B {
+                    //    int aa, bb;
+                    // };
                     if lexeme[head + 2].get_token_type() == LeftCurlyBrace {
                         //struct A{};
                         while lexeme[head].get_token_type() != RightCurlyBrace
@@ -598,6 +621,10 @@ impl Parser {
                         stream.append(&mut self.parse_class(&temp_lexeme));
                         temp_lexeme.clear();
                         head += 2; //skip semicolon
+                    } else {
+                        // 实际情况会比较复杂，
+                        // 防止无线限循环
+                        head += 1;
                     }
                 }
 
@@ -789,7 +816,10 @@ impl Parser {
                 }
             }
         }
-        while lexeme[head].get_token_type() != LeftCurlyBrace {
+        while head < lexeme.len() && lexeme[head].get_token_type() != LeftCurlyBrace {
+            // if head >= lexeme.len() {
+            //     break;
+            // }
             head += 1
         }
         head += 1;
@@ -1062,7 +1092,10 @@ impl Parser {
 
                 stream.push((&i.assigned_val).to_string());
             }
-            stream.push(";".to_string());
+            // 有可能会重复
+            if sym_table_right.len() > 1 {
+                stream.push(";\n".to_string());
+            }
         }
         stream
     }
@@ -1356,22 +1389,22 @@ impl Parser {
         let mut head: usize = 0;
         let mut lookahead: usize;
         let mut temp_lexeme: Vec<Token> = Vec::new();
-
+        //在for (int i =0; )找到(
         while lexeme[head].get_token_type() != LeftBracket {
             head += 1;
         }
         head += 1;
         lookahead = head;
 
-        //for (int i =0; )
+        //for (int i =0; )第一个节点是数据类型吗
         let decl: bool = if lexeme[head].get_token_kind() == TokenKind::DataTypes {
             true
         } else {
             false
         };
         // let mut no_init:bool; //no initialization
-        let mut no_cond: bool = false; //if no condition to terminate
-        let mut no_updation: bool = false; //no inc/dec of loop counter
+        let mut no_cond: bool = false; //if no condition to terminate，没有结束条件，
+        let mut no_updation: bool = false; //no inc/dec of loop counter，没有计数器，
 
         let mut body: Vec<String> = Vec::new();
         let mut updation: Vec<String> = Vec::new();
@@ -1380,6 +1413,7 @@ impl Parser {
         lookahead = skip_stmt(&lexeme, lookahead);
 
         //incase of initialization expressio for (;i<10;i++) ; common case
+        //for (int i = 0; i < 100; i++) {，在这里找到int i = 0;并生成数据声明 let i:i32 = 0;
         if head + 1 < lookahead {
             while head < lookahead {
                 let l: Token = lexeme[head].clone();
@@ -1389,6 +1423,7 @@ impl Parser {
 
             if decl == true {
                 stream.append(&mut self.parse_declaration(&temp_lexeme));
+                println!("{:?}", stream);
             } else {
                 stream.append(&mut self.parse_assignment(&temp_lexeme));
             }
@@ -1399,6 +1434,7 @@ impl Parser {
         temp_lexeme.clear();
 
         // terminating condition
+        // /for (int i = 0; i < 100; i++) {，在这里找到结束条件表达式i < 100;生成while i < 100;最
         lookahead = skip_stmt(&lexeme, lookahead);
 
         if head + 1 < lookahead {
@@ -1533,12 +1569,20 @@ impl Parser {
             if lexeme[n].get_token_kind() == TokenKind::UnaryOperators {
                 stream.push(lexeme[m].get_token_value());
             } else {
+                println!("{:#?}", lexeme);
                 stream.push(lexeme[n].get_token_value());
                 n += 1;
                 if lexeme[n].get_token_type() == LeftBracket
                     || lexeme[n].get_token_type() == LeftSquareBracket
                 {
                     while lexeme[n].get_token_type() != Semicolon {
+                        stream.push(lexeme[n].get_token_value());
+                        n += 1;
+                    }
+                } else {
+                    //复制过去
+                    // fcl.line = new float[m_MaxPoint];
+                    while n < lexeme.len() && lexeme[n].get_token_type() != Semicolon {
                         stream.push(lexeme[n].get_token_value());
                         n += 1;
                     }
@@ -1564,8 +1608,17 @@ impl Parser {
         let mut prev_id = " ".to_string();
         let mut typ = Others;
         //a=b+c++;
+        // let mut pre_line = lexeme[thead].get_token_line_num();
 
-        while lexeme[thead].get_token_type() != Semicolon {
+        // 一般是int i = 100;
+        // 也有可能是这样的int i = 100,j=200;
+        while lexeme[thead].get_token_type() != Semicolon && lexeme[thead].get_token_type() != Comma
+        {
+            // if lexeme[thead].get_token_line_num() != pre_line {
+            //     break;
+            // }
+            // pre_line = lexeme[thead].get_token_line_num();
+
             if lexeme[thead].get_token_kind() == TokenKind::UnaryOperators {
                 if lexeme[thead].get_token_type() == SizeOf {
                     //println!(" {:?} ",lexeme);
@@ -1618,6 +1671,13 @@ impl Parser {
             prev_id = lexeme[thead].get_token_value();
 
             thead += 1;
+            if thead == lexeme.len() {
+                println!("{:#?}", lexeme[thead - 1]);
+                println!(
+                    "1663-出错,没有在行{}找到分号或是逗号",
+                    lexeme[thead - 1].get_token_line_num()
+                );
+            }
         }
         stream.push(";".to_string());
         if tstream.len() > 0 {
@@ -1645,9 +1705,18 @@ impl Parser {
         let mut head = 0;
         stream.push(lexeme[head + 1].get_token_value());
         stream.push(":".to_string());
-        stream
-            .push("[".to_string() + &typ[..] + ";" + &lexeme[head + 3].get_token_value()[..] + "]");
-        head = 5;
+        // xxx[12]
+        if lexeme[head + 4].get_token_value() == "]" {
+            stream.push(
+                "[".to_string() + &typ[..] + ";" + &lexeme[head + 3].get_token_value()[..] + "]",
+            );
+            head = 5;
+        //xxx[]
+        } else {
+            stream.push("[".to_string() + &typ[..] + "]");
+            head = 4;
+        }
+
         let mut lookahead = head;
         while lexeme[lookahead].get_token_type() != Semicolon {
             lookahead += 1;
@@ -1665,14 +1734,27 @@ impl Parser {
             temp_lexeme.push(lexeme[head].clone());
             stream.append(&mut self.parse_program(&temp_lexeme));
         } else if lexeme[head].get_token_type() == Assignment {
+            // let mut has_left = false;
+
             while lexeme[head].get_token_type() != Semicolon
                 && lexeme[head].get_token_type() != RightCurlyBrace
             {
-                stream.push(match lexeme[head].get_token_type() {
-                    LeftCurlyBrace => "[".to_string(),
+                //  static char THIS_FILE[] = __FILE__;//如果只有一个赋值，强制加上一个[
+                if lexeme[head].get_token_type() == Assignment {
+                    stream.push(lexeme[head].get_token_value());
+                    stream.push("[".to_string());
+                } else if lexeme[head].get_token_kind() == TokenKind::Comments {
+                    stream.push(lexeme[head].get_token_value() + "\n");
+                } else {
+                    stream.push(match lexeme[head].get_token_type() {
+                        LeftCurlyBrace => {
+                            // 不重复增加
+                            "".to_string()
+                        }
+                        _ => lexeme[head].get_token_value(),
+                    });
+                }
 
-                    _ => lexeme[head].get_token_value(),
-                });
                 head += 1;
             }
             stream.push("]".to_string());
@@ -1697,12 +1779,26 @@ impl Parser {
         head += 2;
         let mut temp_lexeme: Vec<Token> = Vec::new();
         while lexeme[head].get_token_type() != RightCurlyBrace {
-            while lexeme[head].get_token_type() != Semicolon {
+            while head < (lexeme.len() - 1) && lexeme[head].get_token_type() != Semicolon {
+                println!("2:{}", lexeme[head].get_token_value());
+                // println!("1:{}",lexeme[head].get_token_value());
+
+                if lexeme[head].get_token_value() == "m_nIsFromServer" {
+                    println!("");
+                }
                 temp_lexeme.push(lexeme[head].clone());
                 head += 1
             }
+
             temp_lexeme.push(lexeme[head].clone());
             head += 1;
+            //结束位置不对，不是以；结束，有可能是注释
+            if temp_lexeme.iter().last().unwrap().get_token_type() != Semicolon {
+                // head += 1;
+                head -= 1;
+                temp_lexeme.clear();
+                continue;
+            }
             stream.append(&mut self.parse_struct_inbody_decl(&temp_lexeme, &name));
             temp_lexeme.clear();
         }
@@ -1715,7 +1811,15 @@ impl Parser {
     fn parse_struct_inbody_decl(&mut self, lexeme: &Vec<Token>, name: &String) -> Vec<String> {
         let mut stream: Vec<String> = Vec::new();
         let mut head = 0;
-        //push the identifier
+        for it in lexeme {
+            println!("lexeme>>{:#?}", it);
+        }
+        // let mut start = 1;
+        while lexeme[head].get_token_kind() == TokenKind::Comments {
+            stream.push(lexeme[head].get_token_value() + "\n");
+            head += 1;
+        }
+        //push the identifier,标识符
         stream.push(lexeme[head + 1].get_token_value());
         stream.push(":".to_string());
         let mut struct_memt = CStructMem {
@@ -1724,28 +1828,89 @@ impl Parser {
             member_type: TokenType::Others,
         };
 
-        let mut rust_type = "RUST_TYPE".to_string();
+        // check is the array
+        // float max[8];
+        let is_array = if lexeme[head + 2].get_token_type() == LeftSquareBracket
+            && lexeme[head + 4].get_token_type() == RightSquareBracket
+        {
+            true
+        } else {
+            false
+        };
+
+        let mut rust_type = lexeme[head].get_token_value(); // "RUST_TYPE".to_string();
         if let Some(rust_typ) = parse_type(lexeme[head].get_token_type(), Modifier::Default) {
             rust_type = rust_typ.clone();
+            if is_array {
+                stream.push("[".to_string());
+            }
             stream.push(rust_typ);
+            if is_array {
+                stream.push(";".to_string());
+                stream.push(lexeme[head + 3].get_token_value());
+                stream.push("]".to_string());
+            }
+            struct_memt.member_type = lexeme[head].get_token_type();
+            struct_memt.identifier = lexeme[head + 1].get_token_value();
+        } else {
+            // 没有找到对应的类型，原样输出
+            if is_array {
+                stream.push("[".to_string());
+            }
+            stream.push(rust_type.clone());
+            if is_array {
+                stream.push(";".to_string());
+                // array
+                stream.push(lexeme[head + 3].get_token_value());
+                stream.push("]".to_string());
+            }
             struct_memt.member_type = lexeme[head].get_token_type();
             struct_memt.identifier = lexeme[head + 1].get_token_value();
         }
+        if is_array {
+            // float max[8];//如果是数组，那么会有５个token,
+            head += 3;
+        }
+        // int min; 非数组，只有2个token
         head += 2;
+
         stream.push(",".to_string());
         self.struct_mem.push(struct_memt.clone());
+
+        // strcut a {
+        // int a, b, c;
+        // }
         while lexeme[head].get_token_type() != Semicolon {
             if lexeme[head].get_token_type() == Comma {
                 head += 1;
             }
-            struct_memt.identifier = lexeme[head].get_token_value();
-            stream.push(lexeme[head].get_token_value());
-            stream.push(":".to_string());
-            stream.push(rust_type.clone());
-            head += 1;
-            stream.push(",".to_string());
-            self.struct_mem.push(struct_memt.clone());
+            if lexeme[head + 1].get_token_type() == LeftSquareBracket
+                && lexeme[head + 3].get_token_type() == RightSquareBracket
+            {
+                // int a[9], b[9];
+                struct_memt.identifier = lexeme[head].get_token_value();
+                stream.push(lexeme[head].get_token_value());
+                stream.push(": [".to_string());
+                stream.push(rust_type.clone());
+                stream.push(";".to_string());
+                stream.push(lexeme[head + 2].get_token_value());
+                stream.push("]".to_string());
+                // int a[9], b[9];  // b[9]是4个标识符合
+                head += 4;
+                stream.push(",".to_string());
+                self.struct_mem.push(struct_memt.clone());
+            } else {
+                struct_memt.identifier = lexeme[head].get_token_value();
+                stream.push(lexeme[head].get_token_value());
+                stream.push(":".to_string());
+                stream.push(rust_type.clone());
+                // int a, b, c;
+                head += 1;
+                stream.push(",".to_string());
+                self.struct_mem.push(struct_memt.clone());
+            };
         }
+        // println!("{:?}", stream);
         stream
     }
 

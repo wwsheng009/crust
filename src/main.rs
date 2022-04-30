@@ -6,6 +6,7 @@ use std::io;
 use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
+use std::ops::IndexMut;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -62,24 +63,31 @@ fn get_settings_interactively() -> Settings {
 
     print!("Enter the C/C++ file to be converted to Rust : ");
     io::stdout().flush().expect("FATAL : Buffer flush failed");
-    io::stdin().read_line(&mut input).expect("Unable to read");
+    // io::stdin().read_line(&mut input).expect("Unable to read");
+
+    input = "FxjLib\\CFormularContent.h".into();
+    input = "examples\\struct1.cpp".into();
 
     let mut strict = String::new();
 
     print!("Enter the translation mode [(S/s)trict/(L/l)oose] : ");
     io::stdout().flush().expect("FATAL : Buffer flush failed");
-    io::stdin().read_line(&mut strict).expect("Unable to read");
+    // io::stdin().read_line(&mut strict).expect("Unable to read");
     let strict = strict.trim();
     let strict = matches!(strict, "S" | "Strict" | "s");
+
+    let strict = false;
 
     let mut cargo = String::new();
     print!("Do you want to create a cargo project :[Y/N]");
     io::stdout().flush().expect("FATAL : Buffer flush failed.");
-    io::stdin()
-        .read_line(&mut cargo)
-        .expect("Unable to read input");
+    // io::stdin()
+    //     .read_line(&mut cargo)
+    //     .expect("Unable to read input");
     let cargo = cargo.trim();
     let cargo: bool = matches!(cargo, "Y" | "y");
+
+    let cargo = false;
 
     let mut project_name = None;
     if cargo {
@@ -118,7 +126,7 @@ fn invoke(settings: &Settings) {
         println!("Input file size : {}bytes ", size);
 
         let tok = Tokenizer::new(&text);
-        print!("Tokenizing");
+        println!("Tokenizing");
 
         let tokens = tok.tokenize();
         //let mut out: Vec<String> = Vec::new();
@@ -140,9 +148,16 @@ fn invoke(settings: &Settings) {
         let rust_lexeme = parser::init_parser(&tokens, settings.strict);
         //regenerate the code from lexemes
         let mut o: String = String::new();
+
+        let mut prev_string = "".into();
         for i in rust_lexeme {
-            o += " ";
+            if i != "." && prev_string !="."{
+                o += " ";
+            }
+           
+
             o += &i[..];
+            prev_string = i.clone();
         }
 
         let mut fname = PathBuf::from(input);

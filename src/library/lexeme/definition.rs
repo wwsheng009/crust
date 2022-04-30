@@ -37,37 +37,65 @@ pub enum TokenType {
     Using,
 
     //operators token types
+    /// ==
     Equal,
+    /// !=
     NotEqual,
+    /// +
     Plus,
+    /// -
     Minus,
+    /// *
     Multiplication,
+    /// /
     Divide,
+    /// %
     Module,
+    /// +=
     PlusEqual,
+    /// -=
     MinusEqual,
+    /// *=
     MultiplyEqual,
+    /// /=
     DivideEqual,
+    /// %=
     ModuleEqual,
+    /// &
     BitwiseAnd,
+    /// |
     BitwiseOr,
+    /// ~
     BitwiseNegate,
+    // <<
     BitwiseLeftShift,
+    /// >>
     BitwiseRightShift,
+    /// &&
     LogicalAnd,
+    /// ||
     LogicalOr,
+    /// !
     LogicalNot,
+    /// ++
     Increment,
+    /// --
     Decrement,
-
+    /// >
     GreaterThan,
+    /// <
     LessThan,
+    /// <=
     LessThanOrEqual,
+    /// >=
     GreaterThanOrEqual,
+    /// todo()
     AddressOf,
+    /// =
     Assignment,
     //sizeof()
     SizeOf,
+    /// ?
     TernaryOpetator,
     //---> Values type
     CharValue,
@@ -78,19 +106,32 @@ pub enum TokenType {
     False,
 
     //special character token types
+    /// {
     LeftCurlyBrace,
+    /// }
     RightCurlyBrace,
+    /// (
     LeftBracket,
+    /// )
     RightBracket,
+    /// [
     LeftSquareBracket,
+    /// ]
     RightSquareBracket,
+    /// :
     Colon,
+    /// ;
     Semicolon,
+    /// ,
     Comma,
+    /// //
     SingleLineComment,
+    /// /* */
     MultilineComment,
     Identifier,
+    /// >
     Arrow,
+    /// ::
     ScopeResolution,
 
     //Identifiers an=d keywords
@@ -117,6 +158,7 @@ pub enum TokenType {
     KeywordUnion,
 
     HeaderDefine,
+    /// #
     HeaderInclude,
     HeaderIfDefineStart,
     HeaderIfDefineEnd,
