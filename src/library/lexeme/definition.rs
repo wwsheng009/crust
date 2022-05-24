@@ -35,7 +35,7 @@ pub enum TokenType {
     Signed,
     Auto,
     Using,
-
+    
     //operators token types
     /// ==
     Equal,

@@ -17,6 +17,17 @@ impl Clone for Token {
     }
 }
 
+
+pub fn replcae_string_for_go(input: String)->String{
+    match input.as_str() {
+        "->" => ".".to_string(),
+        "NULL" => "nil".to_string(),
+        "::" => ".".to_string(),
+        "FALSE" => "false".to_string(),
+        "TRUE" => "true".to_string(),
+        _ => input
+    }
+}
 impl Token {
     pub fn new(
         token: String,
@@ -34,7 +45,9 @@ impl Token {
         }
     }
 
+
     // returns both token kind and token type.
+    // token的类别与类型
     pub fn get_type(&self) -> (TokenKind, TokenType) {
         (self.token_kind, self.token_type)
     }
@@ -47,7 +60,8 @@ impl Token {
     }
 
     pub fn get_token_value(&self) -> String {
-        self.token.clone()
+        //特别处理，不同语言可能需要进行不同的处理
+        replcae_string_for_go(self.token.clone())
     }
 
     pub fn get_token_line_num(&self) -> u32 {

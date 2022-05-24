@@ -415,6 +415,9 @@ impl<'a> Tokenizer<'a> {
                                         break;
                                     }
                                 }
+                                if self.current_char == '\0' {
+                                    break;
+                                }
                             }
                         }
 

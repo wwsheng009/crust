@@ -12,9 +12,9 @@ use std::process::Command;
 
 use getopts::Options;
 
+use library::go_parser::parser as go_parser;
 use library::lexer::tokenizer::Tokenizer;
 use library::parser::parser;
-
 mod library;
 
 struct Settings {
@@ -28,6 +28,10 @@ fn print_usage(program: &str, opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
+enum LangType {
+    Rust,
+    Go,
+}
 fn main() {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -58,13 +62,14 @@ fn main() {
     invoke(&settings);
 }
 
-fn get_settings_interactively() -> Settings {
+fn get_settings_interactively() -> Settings { 
     let mut input = String::new();
 
     print!("Enter the C/C++ file to be converted to Rust : ");
     io::stdout().flush().expect("FATAL : Buffer flush failed");
     // io::stdin().read_line(&mut input).expect("Unable to read");
 
+    //调试时直接指定输入文件
     input = "FxjLib\\CFormularContent.h".into();
     input = "examples\\struct1.cpp".into();
 
@@ -87,6 +92,7 @@ fn get_settings_interactively() -> Settings {
     let cargo = cargo.trim();
     let cargo: bool = matches!(cargo, "Y" | "y");
 
+    //是否生成新的项目，调试时不需要
     let cargo = false;
 
     let mut project_name = None;
@@ -108,11 +114,11 @@ fn get_settings_interactively() -> Settings {
 }
 
 fn invoke(settings: &Settings) {
-    for input in settings.files.iter() {
-        let file = match File::open(input) {
+    for inputFile in settings.files.iter() {
+        let file = match File::open(inputFile) {
             Ok(f) => f,
             Err(err) => {
-                println!("Unable to open input source file '{}': {}.", input, err);
+                println!("Unable to open input source file '{}': {}.", inputFile, err);
                 std::process::exit(1);
             }
         };
@@ -128,6 +134,7 @@ fn invoke(settings: &Settings) {
         let tok = Tokenizer::new(&text);
         println!("Tokenizing");
 
+        //针对文件生成所有的token
         let tokens = tok.tokenize();
         //let mut out: Vec<String> = Vec::new();
         // tok.tokenize();
@@ -145,24 +152,41 @@ fn invoke(settings: &Settings) {
         println!("Invoking Parser....");
 
         let mode = if settings.strict { "Strict" } else { "Loose" };
-        let rust_lexeme = parser::init_parser(&tokens, settings.strict);
-        //regenerate the code from lexemes
-        let mut o: String = String::new();
+        //语法处理
+        // let rust_lexeme = parser::init_parser(&tokens, settings.strict);
+        let langty = LangType::Go;
 
+        let rust_lexeme = match langty {
+            LangType::Go => go_parser::init_parser(&tokens, settings.strict),
+            LangType::Rust => parser::init_parser(&tokens, settings.strict),
+        };
+
+        //regenerate the code from lexemes
+        let mut output: String = String::new();
+
+        //作一些异常情况处理
         let mut prev_string = "".into();
         for i in rust_lexeme {
-            if i != "." && prev_string !="."{
-                o += " ";
+            // print!("lexeme line:{:?}\n", i);
+            if i != "." && prev_string != "." {
+                output += " ";
             }
-           
 
-            o += &i[..];
+            output += &i[..];
             prev_string = i.clone();
         }
 
-        let mut fname = PathBuf::from(input);
+        let mut fname = PathBuf::from(inputFile);
 
-        fname.set_extension("rs");
+        match langty {
+            LangType::Go => {
+                fname.set_extension("go");
+            }
+            LangType::Rust => {
+                fname.set_extension("rs");
+            }
+        };
+        // fname.set_extension("rs");
 
         if let Some(ref project_name) = settings.project_name {
             let child = Command::new("cargo")
@@ -185,20 +209,42 @@ fn invoke(settings: &Settings) {
             println!("child code {} ", child.code().unwrap());
         }
 
+        //创建生成的新文件
         let mut file = File::create(&fname).expect("Unable to open file to write");
-        file.write_all(o.as_bytes())
+        file.write_all(output.as_bytes())
             .expect("Unable to write to file");
-        Command::new("rustfmt")
-            .arg("--")
-            .arg(&fname)
-            .output()
-            .expect("Failed to format the translated code");
-        println!(
-            "Rust equivalent of source of `{}` in [{} mode ], is generated successfully, \n\
-		View the rust code in file : `{}`",
-            input.trim(),
-            mode,
-            fname.display()
-        );
+
+        match langty {
+            LangType::Go => {
+                //rust格式化源代码
+                Command::new("go")
+                    .arg("fmt")
+                    .arg(&fname)
+                    .output()
+                    .expect("Failed to format the translated code");
+                println!(
+        "Rust equivalent of source of `{}` in [{} mode ], is generated successfully, \n\
+    View the rust code in file : `{}`",
+        inputFile.trim(),
+        mode,
+        fname.display()
+    );
+            }
+            LangType::Rust => {
+                //rust格式化源代码
+                Command::new("rustfmt")
+                    .arg("--")
+                    .arg(&fname)
+                    .output()
+                    .expect("Failed to format the translated code");
+                println!(
+        "Rust equivalent of source of `{}` in [{} mode ], is generated successfully, \n\
+    View the rust code in file : `{}`",
+        inputFile.trim(),
+        mode,
+        fname.display()
+    );
+            }
+        };
     }
 }
